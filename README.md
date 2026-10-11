@@ -33,6 +33,8 @@ O painel oferece duas formas principais para apagar seus registros:
 2. **Live (Feed do Perfil):**
    * **Como funciona:** O script varre automaticamente o seu perfil na aba de respostas (`/seu-usuario/with_replies`), rolando o feed, excluindo os posts via API e desfazendo os reposts diretamente pela interface.
 
+<img width="986" height="846" alt="image" src="https://github.com/user-attachments/assets/8e0599f9-cad2-42ee-be45-dc2c1d337995" />
+
 ---
 
 ## 📊 Principais Recursos do Fork
