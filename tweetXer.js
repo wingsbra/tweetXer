@@ -1,6 +1,6 @@
 /*
  * ============================================================================
- * TweetXer Fork v7.1
+ * TweetXer Fork v7.3
  * Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude
  * ============================================================================
  * Finalidade : excluir os posts da conta logada no x.com o mais rápido possível.
@@ -14,10 +14,10 @@
 
     const i18n = {
         "pt": {
-            "title": "TweetXer Fork v7.1",
+            "title": "TweetXer Fork v7.3",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer, de Luca Hammer</a>",
-            "kofi_btn": "☕ Doe um café (Ko-fi) se quiser",
+            "kofi_btn": "☕ Se gostou, doe um café se quiser",
             "tab_file": "Backup (Arquivo)",
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecione <code>tweet-headers.js</code> ou <code>tweets.js</code> do backup oficial.",
@@ -35,15 +35,17 @@
             "th_status": "Status",
             "btn_start": "Iniciar Exclusão",
             "btn_stop": "Parar",
+            "btn_paused": "Pausado ({m}m) - Parar",
+            "rate_limit_log": "Rate Limit - Pausa de {m}m",
             "btn_export": "Exportar CSV",
             "no_file": "Nenhum arquivo carregado.",
             "finished": "Processo concluído!"
         },
         "en": {
-            "title": "TweetXer Fork v7.1",
+            "title": "TweetXer Fork v7.3",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer by Luca Hammer</a>",
-            "kofi_btn": "☕ Support me on Ko-fi",
+            "kofi_btn": "☕ If you liked it, buy me a coffee",
             "tab_file": "Backup (File)",
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Select <code>tweet-headers.js</code> or <code>tweets.js</code> from your official backup.",
@@ -61,15 +63,17 @@
             "th_status": "Status",
             "btn_start": "Start Deletion",
             "btn_stop": "Stop",
+            "btn_paused": "Paused ({m}m) - Stop",
+            "rate_limit_log": "Rate Limit - Paused for {m}m",
             "btn_export": "Export CSV",
             "no_file": "No file loaded.",
             "finished": "Process finished!"
         },
         "es": {
-            "title": "TweetXer Fork v7.1",
+            "title": "TweetXer Fork v7.3",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer de Luca Hammer</a>",
-            "kofi_btn": "☕ Invítame un café (Ko-fi)",
+            "kofi_btn": "☕ Si te gustó, invítame un café si quieres",
             "tab_file": "Respaldo (Archivo)",
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecciona <code>tweet-headers.js</code> o <code>tweets.js</code> de tu respaldo oficial.",
@@ -87,6 +91,8 @@
             "th_status": "Estado",
             "btn_start": "Iniciar",
             "btn_stop": "Detener",
+            "btn_paused": "Pausado ({m}m) - Detener",
+            "rate_limit_log": "Rate Limit - Pausa de {m}m",
             "btn_export": "Exportar CSV",
             "no_file": "Ningún archivo cargado.",
             "finished": "¡Proceso terminado!"
@@ -378,23 +384,46 @@
             const batch = state.ids.slice(state.currentIndex, state.currentIndex + speed);
             state.currentIndex += batch.length;
             
+            let rateLimitWait = 0;
+            
             await Promise.all(batch.map(async (id) => {
+                if (rateLimitWait > 0) {
+                    state.ids.push(id); // Re-queue if another request hit 429
+                    return;
+                }
                 const res = await deleteTweet(id);
                 if (res.status === 200) {
                     state.stats.ok++; addLog(id, 'OK', true);
                 } else if (res.status === 429) {
-                    state.stats.fail++; addLog(id, 'Rate Limit (429)', false);
-                    state.ids.push(id); state.stats.total++; // Re-queue
-                    const waitTime = Math.max(0, (res.reset * 1000) - Date.now()) + 2000;
-                    state.running = false;
-                    alert(`Rate limit atingido. Pausando por ${Math.ceil(waitTime/60000)} minutos.`);
+                    state.stats.fail++; 
+                    state.ids.push(id); // Re-queue
+                    rateLimitWait = res.reset ? Math.max(0, (res.reset * 1000) - Date.now()) + 2000 : 15 * 60 * 1000;
+                    addLog(id, 'Rate Limit (429)', false);
                 } else {
                     state.stats.fail++; addLog(id, `Erro ${res.status}`, false);
                 }
             }));
             
             updateStats();
-            if (state.running) await sleep(speed === 3 ? 500 : 1500);
+            
+            if (rateLimitWait > 0 && state.running) {
+                const mins = Math.ceil(rateLimitWait / 60000);
+                addLog('SYS', t('rate_limit_log').replace('{m}', mins), false);
+                
+                const btn = $('tx_stop');
+                const originalText = t('btn_stop');
+                let timeLeft = rateLimitWait;
+                
+                // Countdown loop
+                while(timeLeft > 0 && state.running) {
+                    btn.innerText = t('btn_paused').replace('{m}', Math.ceil(timeLeft/60000));
+                    await sleep(Math.min(1000, timeLeft));
+                    timeLeft -= 1000;
+                }
+                btn.innerText = originalText;
+            } else if (state.running) {
+                await sleep(speed === 3 ? 500 : 1500);
+            }
         }
         if (state.currentIndex >= state.ids.length) {
             state.running = false;
@@ -423,7 +452,22 @@
                 if (res.status === 200) {
                     state.stats.ok++; addLog(id, 'OK', true); tweet.remove(); processedAny = true;
                 } else if (res.status === 429) {
-                    state.running = false; alert("Rate limit atingido. Aguarde 15 minutos."); break;
+                    const waitTime = res.reset ? Math.max(0, (res.reset * 1000) - Date.now()) + 2000 : 15 * 60 * 1000;
+                    const mins = Math.ceil(waitTime / 60000);
+                    addLog(id, t('rate_limit_log').replace('{m}', mins), false);
+                    
+                    const btn = $('tx_stop');
+                    const originalText = t('btn_stop');
+                    let timeLeft = waitTime;
+                    
+                    // Countdown loop
+                    while(timeLeft > 0 && state.running) {
+                        btn.innerText = t('btn_paused').replace('{m}', Math.ceil(timeLeft/60000));
+                        await sleep(Math.min(1000, timeLeft));
+                        timeLeft -= 1000;
+                    }
+                    btn.innerText = originalText;
+                    break; // Break inner loop to re-fetch DOM elements after pause
                 } else {
                     state.stats.fail++; addLog(id, `Erro ${res.status}`, false); tweet.remove();
                 }
@@ -445,6 +489,7 @@
     $('tx_stop').onclick = () => {
         state.running = false;
         $('tx_start').style.display = 'block'; $('tx_stop').style.display = 'none';
+        $('tx_stop').innerText = t('btn_stop'); // Reset text in case it was paused
     };
 
 })();
