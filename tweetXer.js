@@ -1,6 +1,6 @@
 /*
  * ============================================================================
- * TweetXer Fork v7.6 (Smart Cache & Smart Probe Edition)
+ * TweetXer Fork v7.7 (Smart Cache & Exponential Probe)
  * Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude
  * ============================================================================
  * Finalidade : excluir os posts da conta logada no x.com o mais rápido possível.
@@ -14,7 +14,7 @@
 
     const i18n = {
         "pt": {
-            "title": "TweetXer Fork v7.6",
+            "title": "TweetXer Fork v7.7",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer, de Luca Hammer</a>",
             "kofi_btn": "☕ Se gostou, doe um café se quiser",
@@ -22,7 +22,7 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecione <code>tweet-headers.js</code> ou <code>tweets.js</code> do backup oficial.",
             "skip_rt": "Pular Retweets (requer tweets.js)",
-            "smart_skip": "Pulo Inteligente (Acelera se já usou outro app)",
+            "smart_skip": "Sonda Exponencial (Acelera se já usou outro app)",
             "keep_days": "Preservar recentes (dias):",
             "keep_likes": "Preservar populares (curtidas):",
             "cache_info": "Memória: {n} já excluídos",
@@ -44,12 +44,12 @@
             "no_file": "Nenhum arquivo carregado.",
             "finished": "Processo concluído!",
             "status_ghost": "Já não existia",
-            "log_probe": "Sonda: Testando pulo de 100 IDs...",
-            "log_probe_ok": "Sonda: Sucesso! {n} fantasmas pulados.",
-            "log_probe_fail": "Sonda: Fim da zona fantasma."
+            "log_probe": "Sonda: Testando pulo de {n} IDs...",
+            "log_probe_ok": "Sonda: Sucesso! {n} fantasmas pulados. Dobrando pulo...",
+            "log_probe_fail": "Sonda: Encontrou tweet real. Ajustando fronteira..."
         },
         "en": {
-            "title": "TweetXer Fork v7.6",
+            "title": "TweetXer Fork v7.7",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer by Luca Hammer</a>",
             "kofi_btn": "☕ If you liked it, buy me a coffee",
@@ -57,7 +57,7 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Select <code>tweet-headers.js</code> or <code>tweets.js</code> from your official backup.",
             "skip_rt": "Skip Retweets (requires tweets.js)",
-            "smart_skip": "Smart Skip (Fast-forward if used another app)",
+            "smart_skip": "Exponential Probe (Fast-forward if used another app)",
             "keep_days": "Keep recent (days):",
             "keep_likes": "Keep popular (likes):",
             "cache_info": "Memory: {n} already deleted",
@@ -79,12 +79,12 @@
             "no_file": "No file loaded.",
             "finished": "Process finished!",
             "status_ghost": "Already gone",
-            "log_probe": "Probe: Testing 100 IDs jump...",
-            "log_probe_ok": "Probe: Success! {n} ghosts skipped.",
-            "log_probe_fail": "Probe: End of ghost zone."
+            "log_probe": "Probe: Testing jump of {n} IDs...",
+            "log_probe_ok": "Probe: Success! {n} ghosts skipped. Doubling jump...",
+            "log_probe_fail": "Probe: Hit real tweet. Adjusting boundary..."
         },
         "es": {
-            "title": "TweetXer Fork v7.6",
+            "title": "TweetXer Fork v7.7",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer de Luca Hammer</a>",
             "kofi_btn": "☕ Si te gustó, invítame un café si quieres",
@@ -92,7 +92,7 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecciona <code>tweet-headers.js</code> o <code>tweets.js</code> de tu respaldo oficial.",
             "skip_rt": "Omitir Retweets (requiere tweets.js)",
-            "smart_skip": "Salto Inteligente (Acelera si usaste otra app)",
+            "smart_skip": "Sonda Exponencial (Acelera si usaste otra app)",
             "keep_days": "Conservar recientes (días):",
             "keep_likes": "Conservar populares (likes):",
             "cache_info": "Memoria: {n} ya eliminados",
@@ -114,9 +114,9 @@
             "no_file": "Ningún archivo cargado.",
             "finished": "¡Proceso terminado!",
             "status_ghost": "Ya no existía",
-            "log_probe": "Sonda: Probando salto de 100 IDs...",
-            "log_probe_ok": "Sonda: ¡Éxito! {n} fantasmas saltados.",
-            "log_probe_fail": "Sonda: Fin de zona fantasma."
+            "log_probe": "Sonda: Probando salto de {n} IDs...",
+            "log_probe_ok": "Sonda: ¡Éxito! {n} fantasmas saltados. Doblando salto...",
+            "log_probe_fail": "Sonda: Encontró tweet real. Ajustando frontera..."
         }
     };
 
@@ -464,22 +464,22 @@
 
     const processQueue = async () => {
         const speed = parseInt($('tx_speed').value, 10);
-        let ghostStreak = 0; // Contador para a Sonda Inteligente
+        let ghostStreak = 0; 
+        let probeStep = 100; // Inicia o pulo em 100
 
         while (state.running && state.currentIndex < state.ids.length) {
             const smartSkip = $('tx_smart_skip').checked;
 
-            // --- SMART PROBE (Sonda Inteligente) ---
-            // Se achou 3 fantasmas seguidos, testa dar um pulo de 100 IDs
-            if (smartSkip && ghostStreak >= 3 && state.currentIndex + 100 < state.ids.length) {
-                const probeIndex = state.currentIndex + 100;
+            // --- SMART PROBE EXPONENCIAL ---
+            if (smartSkip && ghostStreak >= 3 && state.currentIndex < state.ids.length - 1) {
+                const probeIndex = Math.min(state.currentIndex + probeStep, state.ids.length - 1);
                 const probeId = state.ids[probeIndex];
                 
-                addLog('SYS', t('log_probe'), true);
+                addLog('SYS', t('log_probe').replace('{n}', probeStep), true);
                 const res = await deleteTweet(probeId);
 
                 if (res.status === 404 && res.type === 'ghost') {
-                    // Sonda confirmou! O 100º tweet também é fantasma. Pula todos os 100.
+                    // Sonda confirmou! Tudo até o probeIndex é fantasma.
                     let skippedCount = 0;
                     for(let i = state.currentIndex; i <= probeIndex; i++) {
                         if (!state.deletedCache.has(state.ids[i])) {
@@ -490,6 +490,7 @@
                     }
                     addLog('SYS', t('log_probe_ok').replace('{n}', skippedCount), true);
                     state.currentIndex = probeIndex + 1;
+                    probeStep *= 2; // PULO EXPONENCIAL (100 -> 200 -> 400 -> 800...)
                     updateStats();
                     updateCacheUI();
                     saveCache(state.deletedCache);
@@ -501,9 +502,11 @@
                     await doWait(waitTime);
                     continue; // Tenta a sonda de novo após a pausa
                 } else {
-                    // Sonda bateu em um tweet real. Fim da zona fantasma.
+                    // Sonda bateu em um tweet real (Overshoot). Fim da zona fantasma.
                     addLog('SYS', t('log_probe_fail'), true);
-                    ghostStreak = 0; // Reseta o contador
+                    ghostStreak = 0; // Reseta o contador de fantasmas
+                    probeStep = 100; // Reseta o tamanho do pulo
+                    
                     if (res.status === 200) {
                         state.stats.ok++;
                         addLog(probeId, 'OK', true);
@@ -515,7 +518,8 @@
                         state.stats.fail++;
                         addLog(probeId, `Erro ${res.status}`, false);
                     }
-                    // Não avança o currentIndex aqui, deixa o loop normal processar os que ficaram pra trás
+                    // IMPORTANTE: Não avança o currentIndex aqui. 
+                    // Deixa o loop normal processar o "buraco" que ficou para trás.
                 }
             }
 
@@ -554,7 +558,7 @@
                 }
             }));
             
-            // Atualiza o contador de fantasmas para a Sonda
+            // Atualiza o contador de fantasmas para ativar a Sonda
             if (batchReal > 0) ghostStreak = 0;
             else if (batchGhosts > 0) ghostStreak += batchGhosts;
 
