@@ -1,6 +1,6 @@
 /*
  * ============================================================================
- * TweetXer Fork v7.3
+ * TweetXer Fork v7.6 (Smart Cache & Smart Probe Edition)
  * Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude
  * ============================================================================
  * Finalidade : excluir os posts da conta logada no x.com o mais rápido possível.
@@ -14,7 +14,7 @@
 
     const i18n = {
         "pt": {
-            "title": "TweetXer Fork v7.3",
+            "title": "TweetXer Fork v7.6",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer, de Luca Hammer</a>",
             "kofi_btn": "☕ Se gostou, doe um café se quiser",
@@ -22,8 +22,11 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecione <code>tweet-headers.js</code> ou <code>tweets.js</code> do backup oficial.",
             "skip_rt": "Pular Retweets (requer tweets.js)",
+            "smart_skip": "Pulo Inteligente (Acelera se já usou outro app)",
             "keep_days": "Preservar recentes (dias):",
             "keep_likes": "Preservar populares (curtidas):",
+            "cache_info": "Memória: {n} já excluídos",
+            "btn_clear": "Limpar",
             "panel_live_desc": "Use a aba <code>/with_replies</code> do seu perfil. O script rola o feed e exclui posts visíveis.",
             "btn_profile": "Abrir meu perfil",
             "speed": "Velocidade:",
@@ -39,10 +42,14 @@
             "rate_limit_log": "Rate Limit - Pausa de {m}m",
             "btn_export": "Exportar CSV",
             "no_file": "Nenhum arquivo carregado.",
-            "finished": "Processo concluído!"
+            "finished": "Processo concluído!",
+            "status_ghost": "Já não existia",
+            "log_probe": "Sonda: Testando pulo de 100 IDs...",
+            "log_probe_ok": "Sonda: Sucesso! {n} fantasmas pulados.",
+            "log_probe_fail": "Sonda: Fim da zona fantasma."
         },
         "en": {
-            "title": "TweetXer Fork v7.3",
+            "title": "TweetXer Fork v7.6",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer by Luca Hammer</a>",
             "kofi_btn": "☕ If you liked it, buy me a coffee",
@@ -50,8 +57,11 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Select <code>tweet-headers.js</code> or <code>tweets.js</code> from your official backup.",
             "skip_rt": "Skip Retweets (requires tweets.js)",
+            "smart_skip": "Smart Skip (Fast-forward if used another app)",
             "keep_days": "Keep recent (days):",
             "keep_likes": "Keep popular (likes):",
+            "cache_info": "Memory: {n} already deleted",
+            "btn_clear": "Clear",
             "panel_live_desc": "Use the <code>/with_replies</code> tab. The script scrolls and deletes visible posts.",
             "btn_profile": "Open my profile",
             "speed": "Speed:",
@@ -67,10 +77,14 @@
             "rate_limit_log": "Rate Limit - Paused for {m}m",
             "btn_export": "Export CSV",
             "no_file": "No file loaded.",
-            "finished": "Process finished!"
+            "finished": "Process finished!",
+            "status_ghost": "Already gone",
+            "log_probe": "Probe: Testing 100 IDs jump...",
+            "log_probe_ok": "Probe: Success! {n} ghosts skipped.",
+            "log_probe_fail": "Probe: End of ghost zone."
         },
         "es": {
-            "title": "TweetXer Fork v7.3",
+            "title": "TweetXer Fork v7.6",
             "credit1": "Fork by: Fabricio Sasaki | Powered by AI: ChatGPT, DeepSeek, Gemini, Claude",
             "credit2": "Base: <a href=\"https://github.com/lucahammer/tweetXer\" target=\"_blank\" style=\"color:#1da1f2;text-decoration:none;\">TweetXer de Luca Hammer</a>",
             "kofi_btn": "☕ Si te gustó, invítame un café si quieres",
@@ -78,8 +92,11 @@
             "tab_live": "Live (Feed)",
             "panel_file_desc": "Selecciona <code>tweet-headers.js</code> o <code>tweets.js</code> de tu respaldo oficial.",
             "skip_rt": "Omitir Retweets (requiere tweets.js)",
+            "smart_skip": "Salto Inteligente (Acelera si usaste otra app)",
             "keep_days": "Conservar recientes (días):",
             "keep_likes": "Conservar populares (likes):",
+            "cache_info": "Memoria: {n} ya eliminados",
+            "btn_clear": "Limpiar",
             "panel_live_desc": "Usa la pestaña <code>/with_replies</code>. El script se desplaza y elimina posts.",
             "btn_profile": "Abrir mi perfil",
             "speed": "Velocidad:",
@@ -95,7 +112,11 @@
             "rate_limit_log": "Rate Limit - Pausa de {m}m",
             "btn_export": "Exportar CSV",
             "no_file": "Ningún archivo cargado.",
-            "finished": "¡Proceso terminado!"
+            "finished": "¡Proceso terminado!",
+            "status_ghost": "Ya no existía",
+            "log_probe": "Sonda: Probando salto de 100 IDs...",
+            "log_probe_ok": "Sonda: ¡Éxito! {n} fantasmas saltados.",
+            "log_probe_fail": "Sonda: Fin de zona fantasma."
         }
     };
 
@@ -130,6 +151,16 @@
         } catch (e) { return 99999; }
     };
 
+    // --- Smart Cache System ---
+    const loadCache = () => {
+        try { return new Set(JSON.parse(localStorage.getItem('tx_deleted_cache') || '[]')); }
+        catch(e) { return new Set(); }
+    };
+    const saveCache = (cacheSet) => {
+        try { localStorage.setItem('tx_deleted_cache', JSON.stringify([...cacheSet])); }
+        catch(e) { console.warn("Cache cheio"); }
+    };
+
     const state = {
         mode: 'file',
         ids: [],
@@ -137,6 +168,7 @@
         running: false,
         stats: { total: 0, ok: 0, fail: 0 },
         logs: [],
+        deletedCache: loadCache(),
         ct0: getCookie('ct0'),
         bearer: 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
         username: ''
@@ -174,11 +206,24 @@
             clearTimeout(timeout);
             
             if (res.status === 429) return { status: 429, reset: parseInt(res.headers.get('x-rate-limit-reset'), 10) };
-            if (res.status === 403) {
+            
+            let data = null;
+            try { data = await res.json(); } catch(e) {}
+
+            if (res.status === 403 || (data && data.errors && data.errors.some(e => e.message.includes('NotAuthorizedForResource')))) {
                 const unrtRes = await unretweet(id);
                 if (unrtRes.status === 200) return { status: 200, type: 'unretweet' };
                 return { status: 403, error: 'Forbidden' };
             }
+
+            if (data && data.errors && data.errors.length > 0) {
+                const errMsg = data.errors[0].message || "";
+                if (errMsg.includes("No status found") || errMsg.includes("not found")) {
+                    return { status: 404, type: 'ghost' };
+                }
+                return { status: res.status, error: errMsg };
+            }
+
             return { status: res.status };
         } catch (e) {
             clearTimeout(timeout);
@@ -220,6 +265,8 @@
                 
                 <div style="margin-top:12px; font-size:13px; background:#f5f8fa; padding:10px; border-radius:8px;">
                     <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="tx_skip_rt"> <span>${t('skip_rt')}</span></label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px;"><input type="checkbox" id="tx_smart_skip" checked> <span>${t('smart_skip')}</span></label>
+                    
                     <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                         <label>${t('keep_days')}</label>
                         <input type="number" id="tx_keep_days" style="width:60px; border:1px solid #e1e8ed; border-radius:4px; padding:4px;" min="0" value="0">
@@ -227,6 +274,10 @@
                     <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
                         <label>${t('keep_likes')}</label>
                         <input type="number" id="tx_keep_likes" style="width:60px; border:1px solid #e1e8ed; border-radius:4px; padding:4px;" min="0" value="0">
+                    </div>
+                    <div style="margin-top:12px; padding-top:8px; border-top:1px solid #e1e8ed; font-size:11px; color:#657786; display:flex; justify-content:space-between; align-items:center;">
+                        <span id="tx_cache_info">${t('cache_info').replace('{n}', state.deletedCache.size)}</span>
+                        <button id="tx_clear_cache" style="background:transparent; border:none; color:#e0245e; cursor:pointer; font-size:11px; text-decoration:underline;">${t('btn_clear')}</button>
                     </div>
                 </div>
             </div>
@@ -275,6 +326,18 @@
     const $ = (id) => document.getElementById(id);
 
     // --- UI Logic ---
+    const updateCacheUI = () => {
+        if($('tx_cache_info')) $('tx_cache_info').innerText = t('cache_info').replace('{n}', state.deletedCache.size);
+    };
+
+    $('tx_clear_cache').onclick = () => {
+        if(confirm("Tem certeza que deseja limpar a memória de tweets já excluídos?")) {
+            state.deletedCache.clear();
+            saveCache(state.deletedCache);
+            updateCacheUI();
+        }
+    };
+
     $('tab_file').onclick = () => {
         state.mode = 'file';
         $('tab_file').style.cssText = "padding:8px 16px; cursor:pointer; border-bottom:2px solid #1da1f2; color:#1da1f2; font-weight:bold; flex:1; text-align:center;";
@@ -346,6 +409,7 @@
         const keepDays = parseInt($('tx_keep_days').value, 10) || 0;
         const keepLikes = parseInt($('tx_keep_likes').value, 10) || 0;
         let allIds = [];
+        let skippedByCache = 0;
         
         for (const file of files) {
             try {
@@ -358,6 +422,11 @@
                     const tweet = item.tweet || item;
                     const id = tweet.id_str || tweet.id || tweet.tweet_id;
                     if (!id) continue;
+                    
+                    if (state.deletedCache.has(id)) {
+                        skippedByCache++;
+                        continue;
+                    }
                     
                     if (skipRt && (tweet.full_text?.match(/^RT @/i) || tweet.retweeted_status || tweet.retweeted_status_id_str)) continue;
                     if (keepLikes > 0 && (parseInt(tweet.favorite_count, 10) || 0) >= keepLikes) continue;
@@ -374,29 +443,110 @@
         state.currentIndex = 0;
         updateStats();
         $('tx_log_body').innerHTML = '';
-        alert(`${t('ready_notice')} (${allIds.length} itens)`);
+        
+        let msg = `${t('ready_notice')} (${allIds.length} itens na fila).`;
+        if (skippedByCache > 0) msg += `\n\n${skippedByCache} tweets foram ignorados automaticamente porque já estavam na memória (já excluídos).`;
+        alert(msg);
     };
 
     // --- Execution Logic ---
+    const doWait = async (waitTime) => {
+        const btn = $('tx_stop');
+        const originalText = t('btn_stop');
+        let timeLeft = waitTime;
+        while(timeLeft > 0 && state.running) {
+            btn.innerText = t('btn_paused').replace('{m}', Math.ceil(timeLeft/60000));
+            await sleep(Math.min(1000, timeLeft));
+            timeLeft -= 1000;
+        }
+        btn.innerText = originalText;
+    };
+
     const processQueue = async () => {
         const speed = parseInt($('tx_speed').value, 10);
+        let ghostStreak = 0; // Contador para a Sonda Inteligente
+
         while (state.running && state.currentIndex < state.ids.length) {
+            const smartSkip = $('tx_smart_skip').checked;
+
+            // --- SMART PROBE (Sonda Inteligente) ---
+            // Se achou 3 fantasmas seguidos, testa dar um pulo de 100 IDs
+            if (smartSkip && ghostStreak >= 3 && state.currentIndex + 100 < state.ids.length) {
+                const probeIndex = state.currentIndex + 100;
+                const probeId = state.ids[probeIndex];
+                
+                addLog('SYS', t('log_probe'), true);
+                const res = await deleteTweet(probeId);
+
+                if (res.status === 404 && res.type === 'ghost') {
+                    // Sonda confirmou! O 100º tweet também é fantasma. Pula todos os 100.
+                    let skippedCount = 0;
+                    for(let i = state.currentIndex; i <= probeIndex; i++) {
+                        if (!state.deletedCache.has(state.ids[i])) {
+                            state.deletedCache.add(state.ids[i]);
+                            state.stats.ok++;
+                            skippedCount++;
+                        }
+                    }
+                    addLog('SYS', t('log_probe_ok').replace('{n}', skippedCount), true);
+                    state.currentIndex = probeIndex + 1;
+                    updateStats();
+                    updateCacheUI();
+                    saveCache(state.deletedCache);
+                    continue; // Pula o processamento normal e vai pro próximo loop
+                } else if (res.status === 429) {
+                    // Rate limit na sonda
+                    const waitTime = res.reset ? Math.max(0, (res.reset * 1000) - Date.now()) + 2000 : 15 * 60 * 1000;
+                    addLog('SYS', t('rate_limit_log').replace('{m}', Math.ceil(waitTime / 60000)), false);
+                    await doWait(waitTime);
+                    continue; // Tenta a sonda de novo após a pausa
+                } else {
+                    // Sonda bateu em um tweet real. Fim da zona fantasma.
+                    addLog('SYS', t('log_probe_fail'), true);
+                    ghostStreak = 0; // Reseta o contador
+                    if (res.status === 200) {
+                        state.stats.ok++;
+                        addLog(probeId, 'OK', true);
+                        state.deletedCache.add(probeId);
+                        saveCache(state.deletedCache);
+                        updateCacheUI();
+                        updateStats();
+                    } else {
+                        state.stats.fail++;
+                        addLog(probeId, `Erro ${res.status}`, false);
+                    }
+                    // Não avança o currentIndex aqui, deixa o loop normal processar os que ficaram pra trás
+                }
+            }
+
+            // --- PROCESSAMENTO NORMAL ---
             const batch = state.ids.slice(state.currentIndex, state.currentIndex + speed);
             state.currentIndex += batch.length;
             
             let rateLimitWait = 0;
+            let batchGhosts = 0;
+            let batchReal = 0;
             
             await Promise.all(batch.map(async (id) => {
                 if (rateLimitWait > 0) {
-                    state.ids.push(id); // Re-queue if another request hit 429
+                    state.ids.push(id); 
                     return;
                 }
                 const res = await deleteTweet(id);
+                
                 if (res.status === 200) {
-                    state.stats.ok++; addLog(id, 'OK', true);
+                    state.stats.ok++; 
+                    batchReal++;
+                    addLog(id, 'OK', true);
+                    state.deletedCache.add(id);
+                } else if (res.status === 404 && res.type === 'ghost') {
+                    state.stats.ok++; 
+                    batchGhosts++;
+                    addLog(id, t('status_ghost'), true);
+                    state.deletedCache.add(id); 
                 } else if (res.status === 429) {
                     state.stats.fail++; 
-                    state.ids.push(id); // Re-queue
+                    state.ids.push(id); 
                     rateLimitWait = res.reset ? Math.max(0, (res.reset * 1000) - Date.now()) + 2000 : 15 * 60 * 1000;
                     addLog(id, 'Rate Limit (429)', false);
                 } else {
@@ -404,23 +554,17 @@
                 }
             }));
             
+            // Atualiza o contador de fantasmas para a Sonda
+            if (batchReal > 0) ghostStreak = 0;
+            else if (batchGhosts > 0) ghostStreak += batchGhosts;
+
+            saveCache(state.deletedCache);
+            updateCacheUI();
             updateStats();
             
             if (rateLimitWait > 0 && state.running) {
-                const mins = Math.ceil(rateLimitWait / 60000);
-                addLog('SYS', t('rate_limit_log').replace('{m}', mins), false);
-                
-                const btn = $('tx_stop');
-                const originalText = t('btn_stop');
-                let timeLeft = rateLimitWait;
-                
-                // Countdown loop
-                while(timeLeft > 0 && state.running) {
-                    btn.innerText = t('btn_paused').replace('{m}', Math.ceil(timeLeft/60000));
-                    await sleep(Math.min(1000, timeLeft));
-                    timeLeft -= 1000;
-                }
-                btn.innerText = originalText;
+                addLog('SYS', t('rate_limit_log').replace('{m}', Math.ceil(rateLimitWait / 60000)), false);
+                await doWait(rateLimitWait);
             } else if (state.running) {
                 await sleep(speed === 3 ? 500 : 1500);
             }
@@ -446,28 +590,25 @@
                 if (!match) continue;
                 const id = match[1];
                 
-                if (state.logs.some(l => l.id === id)) { tweet.remove(); continue; }
+                if (state.logs.some(l => l.id === id) || state.deletedCache.has(id)) { 
+                    tweet.remove(); 
+                    continue; 
+                }
                 
                 const res = await deleteTweet(id);
-                if (res.status === 200) {
-                    state.stats.ok++; addLog(id, 'OK', true); tweet.remove(); processedAny = true;
+                if (res.status === 200 || (res.status === 404 && res.type === 'ghost')) {
+                    state.stats.ok++; 
+                    addLog(id, res.status === 200 ? 'OK' : t('status_ghost'), true); 
+                    state.deletedCache.add(id);
+                    saveCache(state.deletedCache);
+                    updateCacheUI();
+                    tweet.remove(); 
+                    processedAny = true;
                 } else if (res.status === 429) {
                     const waitTime = res.reset ? Math.max(0, (res.reset * 1000) - Date.now()) + 2000 : 15 * 60 * 1000;
-                    const mins = Math.ceil(waitTime / 60000);
-                    addLog(id, t('rate_limit_log').replace('{m}', mins), false);
-                    
-                    const btn = $('tx_stop');
-                    const originalText = t('btn_stop');
-                    let timeLeft = waitTime;
-                    
-                    // Countdown loop
-                    while(timeLeft > 0 && state.running) {
-                        btn.innerText = t('btn_paused').replace('{m}', Math.ceil(timeLeft/60000));
-                        await sleep(Math.min(1000, timeLeft));
-                        timeLeft -= 1000;
-                    }
-                    btn.innerText = originalText;
-                    break; // Break inner loop to re-fetch DOM elements after pause
+                    addLog(id, t('rate_limit_log').replace('{m}', Math.ceil(waitTime / 60000)), false);
+                    await doWait(waitTime);
+                    break; 
                 } else {
                     state.stats.fail++; addLog(id, `Erro ${res.status}`, false); tweet.remove();
                 }
@@ -489,7 +630,7 @@
     $('tx_stop').onclick = () => {
         state.running = false;
         $('tx_start').style.display = 'block'; $('tx_stop').style.display = 'none';
-        $('tx_stop').innerText = t('btn_stop'); // Reset text in case it was paused
+        $('tx_stop').innerText = t('btn_stop'); 
     };
 
 })();
